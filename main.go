@@ -2,7 +2,10 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/lbryio/lbry.go/v2/extras/errors"
 	"github.com/lbryio/lbry.go/v2/extras/jsonrpc"
@@ -100,8 +103,13 @@ func resigner(cmd *cobra.Command, args []string) {
 			logrus.Printf("%s - invalid channel: %s (%s)", s.Name, chanMap[s.SigningChannel.ChannelID], s.SigningChannel.ChannelID)
 		}
 	}
-	logrus.Println("------updating ------")
 	if newChannelID != "" && fundingAccountID != "" {
+		logrus.Println("------preparing funds ------")
+		err = ensureEnoughUTXOs(client, fundingAccountID, len(streamsToResign))
+		if err != nil {
+			panic(errors.Err(err))
+		}
+		logrus.Println("------updating ------")
 		for _, s := range streamsToResign {
 			streamCreateOptions := jsonrpc.StreamCreateOptions{
 				ClaimCreateOptions: jsonrpc.ClaimCreateOptions{
@@ -124,4 +132,107 @@ func resigner(cmd *cobra.Command, args []string) {
 	} else {
 		logrus.Infof("would have updated %d streams if --to and --funding-account were passed", len(streamsToResign))
 	}
+}
+
+func ensureEnoughUTXOs(client *jsonrpc.Client, spendAccount string, target int) error {
+	utxolist, err := client.UTXOList(&spendAccount, 1, 10000)
+	if err != nil {
+		return err
+	} else if utxolist == nil {
+		return errors.Err("no response")
+	}
+
+	count := 0
+	confirmedCount := 0
+
+	for _, utxo := range utxolist.Items {
+		amount, _ := strconv.ParseFloat(utxo.Amount, 64)
+		if utxo.IsMyOutput && utxo.Type == "payment" && amount > 0.001 {
+			if utxo.Confirmations > 0 {
+				confirmedCount++
+			}
+			count++
+		}
+	}
+	logrus.Infof("utxo count: %d (%d confirmed) out of %d needed", count, confirmedCount, target)
+	if count < target {
+		balance, err := client.AccountBalance(&spendAccount)
+		if err != nil {
+			return err
+		} else if balance == nil {
+			return errors.Err("no response")
+		}
+
+		balanceAmount, err := strconv.ParseFloat(balance.Available.String(), 64)
+		if err != nil {
+			return errors.Err(err)
+		}
+		//this is dumb but sometimes the balance is negative and it breaks everything, so let's check again
+		if balanceAmount < 0 {
+			logrus.Infof("negative balance of %.2f found. Waiting to retry...", balanceAmount)
+			time.Sleep(10 * time.Second)
+			balanceAmount, err = strconv.ParseFloat(balance.Available.String(), 64)
+			if err != nil {
+				return errors.Err(err)
+			}
+		}
+		maxUTXOs := uint64(math.Min(float64(target), 500))
+		desiredUTXOCount := uint64(math.Floor((balanceAmount) / 0.01))
+		if desiredUTXOCount > maxUTXOs {
+			desiredUTXOCount = maxUTXOs
+		}
+		if desiredUTXOCount < uint64(confirmedCount) {
+			return nil
+		}
+		availableBalance, _ := balance.Available.Float64()
+		logrus.Infof("Splitting balance of %.3f evenly between %d UTXOs", availableBalance, desiredUTXOCount)
+
+		broadcastFee := 0.1
+		prefillTx, err := client.AccountFund(spendAccount, spendAccount, fmt.Sprintf("%.4f", balanceAmount-broadcastFee), desiredUTXOCount, false)
+		if err != nil {
+			return err
+		} else if prefillTx == nil {
+			return errors.Err("no response")
+		}
+		err = waitForNewBlock(client)
+		if err != nil {
+			return err
+		}
+	} else if confirmedCount == 0 {
+		err = waitForNewBlock(client)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func waitForNewBlock(client *jsonrpc.Client) error {
+	status, err := client.Status()
+	if err != nil {
+		return err
+	}
+
+	for status.Wallet.Blocks == 0 || status.Wallet.BlocksBehind != 0 {
+		time.Sleep(5 * time.Second)
+		status, err = client.Status()
+		if err != nil {
+			return err
+		}
+	}
+
+	currentBlock := status.Wallet.Blocks
+	for i := 0; status.Wallet.Blocks <= currentBlock; i++ {
+		if i%3 == 0 {
+			logrus.Printf("Waiting for new block (%d)...", currentBlock+1)
+		}
+
+		time.Sleep(10 * time.Second)
+		status, err = client.Status()
+		if err != nil {
+			return err
+		}
+	}
+	time.Sleep(5 * time.Second)
+	return nil
 }
