@@ -48,6 +48,7 @@ INFO[0001] rick-and-morty-S04E01 - invalid channel: @RickAndMorty (3e684554030dd
 INFO[0001] ytprova2-NV4VDOjJb7o - invalid channel:  (bdebe36e74fe497aa27f7f83368dd8aac2d364c1) 
 INFO[0001] ytprova2-Adko0l6z42c - invalid channel:  (bdebe36e74fe497aa27f7f83368dd8aac2d364c1) 
 INFO[0001] ytprova2-PsLKmlbqwYM - invalid channel:  (bdebe36e74fe497aa27f7f83368dd8aac2d364c1) 
+INFO[0001] ------updating ------ 
 INFO[0002] successful update. TXID: 3f6ab06cce0ff227363cfaa1691962ccab50cc56c11eb1d7cad03b14dd1c2b4d 
 INFO[0003] successful update. TXID: a8f10d2806f01f54ff86fcee3ed0f7467c98ea29bbbbcde503d866178ba26bc6 
 INFO[0003] successful update. TXID: 3f553f295cd078f1d09b69a03c0720d85a2188ed3af8102923c7865fc72e8dcb
