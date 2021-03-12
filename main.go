@@ -67,7 +67,7 @@ func resigner(cmd *cobra.Command, args []string) {
 		if c.IsSpent {
 			continue
 		}
-		logrus.Infof("%s - %s - %s:%d - %s", c.Name, c.ClaimID, c.Txid, c.Nout, c.Value.GetThumbnail())
+		logrus.Infof("%s - claim_id: %s - outpoint: %s:%d - thumbnail url: %s", c.Name, c.ClaimID, c.Txid, c.Nout, c.Value.GetThumbnail().GetUrl())
 	}
 	logrus.Println("------spent channels------")
 
@@ -79,7 +79,7 @@ func resigner(cmd *cobra.Command, args []string) {
 		if !c.IsSpent {
 			continue
 		}
-		logrus.Infof("%s - %s - %s:%d - %s", c.Name, c.ClaimID, c.Txid, c.Nout, c.Value.GetThumbnail())
+		logrus.Infof("%s - claim_id: %s - outpoint: %s:%d - thumbnail url: %s", c.Name, c.ClaimID, c.Txid, c.Nout, c.Value.GetThumbnail().GetUrl())
 	}
 
 	streams, err := client.StreamList(nil, 1, 100000, false)

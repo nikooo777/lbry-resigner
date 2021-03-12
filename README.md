@@ -28,16 +28,16 @@ INFO[0000] 15) account id: bJvkVYwgu1uQsAYioAqxenwdLSZCAKcdxR - balance: 0 - acc
 INFO[0000] 16) account id: bawNLd9NRyyDyz7C7jBDDEy1Y4AUTSPEsm - balance: 3 - account name: Account #bawNLd9NRyyDyz7C7jBDDEy1Y4AUTSPEsm 
 INFO[0000] 17) account id: bMVaq2jU9KTwYDY9ihLXBphiF9vn7NCdwc - balance: 0.5 - account name: Account #bMVaq2jU9KTwYDY9ihLXBphiF9vn7NCdwc 
 INFO[0001] ------unspent channels------                 
-INFO[0001] @Swiss-Experiments - a0f1f8e50dbc4d104edc5640081a71d19cb98702 - 36125a998c6d03acaba501b8e32f0edaedbd980595969ea106b4a205d3af01cc:0 - url:"https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ"  
-INFO[0001] @thumbnails-test - 67f4261d06c541cb7c8e449b734e21bfb79c8b56 - d3c93cb5e0e324d1fc08857fa4d46390916bbaefca3f3a896ef4c17e78b53b38:0 - <nil> 
+INFO[0001] @Swiss-Experiments - claim_id: a0f1f8e50dbc4d104edc5640081a71d19cb98702 - outpoint: 36125a998c6d03acaba501b8e32f0edaedbd980595969ea106b4a205d3af01cc:0 - thumbnail url: https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ 
+INFO[0001] @thumbnails-test - claim_id: 67f4261d06c541cb7c8e449b734e21bfb79c8b56 - outpoint: d3c93cb5e0e324d1fc08857fa4d46390916bbaefca3f3a896ef4c17e78b53b38:0 - thumbnail url:  
 INFO[0001] ------spent channels------                   
-INFO[0001] @Swiss-Experiments - a0f1f8e50dbc4d104edc5640081a71d19cb98702 - 343ae3646a23a44d59cc7abb562b28b73393fca3394135165b5976a66af84c9e:0 - url:"https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ"  
-INFO[0001] @Swiss-Experiments - a0f1f8e50dbc4d104edc5640081a71d19cb98702 - edca63a0e580716a29a475e8e67eff7a6f456893de4d14016c59e5906b8771f0:0 - url:"https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ"  
-INFO[0001] @Swiss-Experiments - a0f1f8e50dbc4d104edc5640081a71d19cb98702 - bed8165554e1497c5e342e096b107672da047f7e551bc6113e2caeb408a3d1f4:0 - url:"https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ"  
-INFO[0001] @Swiss-Experiments - a0f1f8e50dbc4d104edc5640081a71d19cb98702 - 77811a3f51f9c0dbad30b51105276494170b227ca2dc68b651868fd9bcfa938d:0 - url:"https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ"  
-INFO[0001] @Swiss-Experiments - a0f1f8e50dbc4d104edc5640081a71d19cb98702 - dad62c3ba994360da962078ca2a96d54be14ef631ce7d50fdd9f9dbc3b72eaf0:0 - url:"https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ"  
-INFO[0001] @Swiss-Experiments - a0f1f8e50dbc4d104edc5640081a71d19cb98702 - e2c557f57e379160caa86ac9b78b7bbdcaa095b9920ffb6ac8fb88d96dcb35f2:0 - url:"https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ"  
-INFO[0001] @Swiss-Experiments - a0f1f8e50dbc4d104edc5640081a71d19cb98702 - 6b412367a2b1a75a81059fe1fd56b81c7c96bdb90f041e932c95638c5b9e398a:0 - <nil> 
+INFO[0001] @Swiss-Experiments - claim_id: a0f1f8e50dbc4d104edc5640081a71d19cb98702 - outpoint: 343ae3646a23a44d59cc7abb562b28b73393fca3394135165b5976a66af84c9e:0 - thumbnail url: https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ 
+INFO[0001] @Swiss-Experiments - claim_id: a0f1f8e50dbc4d104edc5640081a71d19cb98702 - outpoint: edca63a0e580716a29a475e8e67eff7a6f456893de4d14016c59e5906b8771f0:0 - thumbnail url: https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ 
+INFO[0001] @Swiss-Experiments - claim_id: a0f1f8e50dbc4d104edc5640081a71d19cb98702 - outpoint: bed8165554e1497c5e342e096b107672da047f7e551bc6113e2caeb408a3d1f4:0 - thumbnail url: https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ 
+INFO[0001] @Swiss-Experiments - claim_id: a0f1f8e50dbc4d104edc5640081a71d19cb98702 - outpoint: 77811a3f51f9c0dbad30b51105276494170b227ca2dc68b651868fd9bcfa938d:0 - thumbnail url: https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ 
+INFO[0001] @Swiss-Experiments - claim_id: a0f1f8e50dbc4d104edc5640081a71d19cb98702 - outpoint: dad62c3ba994360da962078ca2a96d54be14ef631ce7d50fdd9f9dbc3b72eaf0:0 - thumbnail url: https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ 
+INFO[0001] @Swiss-Experiments - claim_id: a0f1f8e50dbc4d104edc5640081a71d19cb98702 - outpoint: e2c557f57e379160caa86ac9b78b7bbdcaa095b9920ffb6ac8fb88d96dcb35f2:0 - thumbnail url: https://thumbnails.lbry.com/UCNQfQvFMPnInwsU_iGYArJQ 
+INFO[0001] @Swiss-Experiments - claim_id: a0f1f8e50dbc4d104edc5640081a71d19cb98702 - outpoint: 6b412367a2b1a75a81059fe1fd56b81c7c96bdb90f041e932c95638c5b9e398a:0 - thumbnail url:  
 INFO[0001] ------streams without valid signatures------ 
 INFO[0001] kawasaki-z650 - invalid channel:  (5b405630077096bf6ff9a3d0079d7abf22bb2a03) 
 INFO[0001] swiss-spring-2020 - invalid channel:  (5b405630077096bf6ff9a3d0079d7abf22bb2a03) 
