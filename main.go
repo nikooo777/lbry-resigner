@@ -55,17 +55,13 @@ func resigner(cmd *cobra.Command, args []string) {
 	}
 
 	chanMap := make(map[string]string, 10)
-	unspentChannels, err := client.ChannelList(nil, 1, 1000, nil, false)
-	if err != nil {
-		panic(errors.Err(err))
-	}
-	spentChannels, err := client.ChannelList(nil, 1, 1000, nil, true)
+	channels, err := client.ChannelList(nil, 1, 1000, nil)
 	if err != nil {
 		panic(errors.Err(err))
 	}
 	logrus.Println("------unspent channels------")
 
-	for _, c := range unspentChannels.Items {
+	for _, c := range channels.Items {
 		chanMap[c.ClaimID] = c.Name
 		if c.IsSpent {
 			continue
@@ -74,18 +70,14 @@ func resigner(cmd *cobra.Command, args []string) {
 	}
 	logrus.Println("------spent channels------")
 
-	for _, c := range spentChannels.Items {
-		_, ok := chanMap[c.ClaimID]
-		if !ok {
-			chanMap[c.ClaimID] = c.Name
-		}
+	for _, c := range channels.Items {
 		if !c.IsSpent {
 			continue
 		}
 		logrus.Infof("%s - claim_id: %s - outpoint: %s:%d - thumbnail url: %s", c.Name, c.ClaimID, c.Txid, c.Nout, c.Value.GetThumbnail().GetUrl())
 	}
 
-	streams, err := client.StreamList(nil, 1, 100000, false)
+	streams, err := client.StreamList(nil, 1, 100000)
 	if err != nil {
 		panic(errors.Err(err))
 	}
