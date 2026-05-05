@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"os/signal"
+	"path"
 	"strconv"
 	"time"
 
@@ -16,11 +18,51 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	defaultEndpoint = "http://127.0.0.1:5279"
+	proxyPath       = "/api/v1/proxy"
+)
+
 var (
 	invalidChannelID string
 	newChannelID     string
 	fundingAccountID string
+	flagEndpoint     string
+	flagAuthToken    string
 )
+
+type runConfig struct {
+	Endpoint  string
+	AuthToken string
+	ProxyMode bool
+}
+
+func isProxyEndpoint(endpoint string) bool {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return false
+	}
+	return path.Clean(u.Path) == proxyPath
+}
+
+func resolveConfig(endpoint, flagToken string) (runConfig, error) {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return runConfig{}, fmt.Errorf("invalid --endpoint URL %q: %w", endpoint, err)
+	}
+	cfg := runConfig{Endpoint: endpoint}
+	if path.Clean(u.Path) != proxyPath {
+		return cfg, nil
+	}
+	cfg.ProxyMode = true
+	if flagToken == "" {
+		return runConfig{}, errors.New("--auth-token is required when --endpoint is the Odysee proxy")
+	}
+	cfg.AuthToken = flagToken
+	u.Path = proxyPath
+	cfg.Endpoint = u.String()
+	return cfg, nil
+}
 
 func main() {
 	cmd := &cobra.Command{
@@ -32,7 +74,9 @@ func main() {
 
 	cmd.Flags().StringVar(&invalidChannelID, "from", "", "claimID of the old channel")
 	cmd.Flags().StringVar(&newChannelID, "to", "", "claimID of the new channel to sign streams with")
-	cmd.Flags().StringVar(&fundingAccountID, "funding-account", "", "id of the funding account used to pay for the transaction")
+	cmd.Flags().StringVar(&fundingAccountID, "funding-account", "", "id of the funding account used to pay for the transaction (required for live updates against a local daemon; optional in proxy mode)")
+	cmd.Flags().StringVar(&flagEndpoint, "endpoint", defaultEndpoint, "lbrynet JSON-RPC endpoint (Odysee proxy or local daemon)")
+	cmd.Flags().StringVar(&flagAuthToken, "auth-token", "", "X-Lbry-Auth-Token sent when --endpoint is the Odysee proxy")
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
@@ -46,7 +90,18 @@ func main() {
 
 func resigner(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
-	client := lbryd.NewClient("http://127.0.0.1:5279")
+
+	cfg, err := resolveConfig(flagEndpoint, flagAuthToken)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	var opts []lbryd.Option
+	if cfg.AuthToken != "" {
+		opts = append(opts, lbryd.WithAuthToken(cfg.AuthToken))
+	}
+	client := lbryd.NewClient(cfg.Endpoint, opts...)
 
 	accountList, err := client.AccountList(ctx, 1, 1000)
 	if err != nil {
@@ -54,6 +109,10 @@ func resigner(cmd *cobra.Command, args []string) {
 	}
 	logrus.Println("------accounts------")
 	for i, a := range accountList.Items {
+		if cfg.ProxyMode {
+			logrus.Printf("%d) account id: %s - account name: %s", i, a.ID, a.Name)
+			continue
+		}
 		accountBalance, err := client.AccountBalance(ctx, &a.ID)
 		if err != nil {
 			panic(err)
@@ -104,27 +163,36 @@ func resigner(cmd *cobra.Command, args []string) {
 			logrus.Printf("%s - invalid channel: %s (%s)", s.Name, chanMap[channelID], channelID)
 		}
 	}
-	if newChannelID != "" && fundingAccountID != "" {
-		logrus.Println("------preparing funds ------")
-		err = ensureEnoughUTXOs(ctx, client, fundingAccountID, len(streamsToResign))
-		if err != nil {
-			panic(err)
+	liveUpdates := newChannelID != "" && (cfg.ProxyMode || fundingAccountID != "")
+
+	if liveUpdates {
+		if !cfg.ProxyMode {
+			logrus.Println("------preparing funds ------")
+			err = ensureEnoughUTXOs(ctx, client, fundingAccountID, len(streamsToResign))
+			if err != nil {
+				panic(err)
+			}
 		}
 		logrus.Println("------updating ------")
 		for _, s := range streamsToResign {
-			res, err := client.StreamUpdate(ctx, s.ClaimID, lbryd.StreamUpdateOptions{
-				ChannelID:         &newChannelID,
-				FundingAccountIDs: []string{fundingAccountID},
-				ClearTags:         lbryd.Ptr(false),
-				ClearLanguages:    lbryd.Ptr(false),
-				ClearLocations:    lbryd.Ptr(false),
-			})
+			updateOpts := lbryd.StreamUpdateOptions{
+				ChannelID:      &newChannelID,
+				ClearTags:      lbryd.Ptr(false),
+				ClearLanguages: lbryd.Ptr(false),
+				ClearLocations: lbryd.Ptr(false),
+			}
+			if fundingAccountID != "" {
+				updateOpts.FundingAccountIDs = []string{fundingAccountID}
+			}
+			res, err := client.StreamUpdate(ctx, s.ClaimID, updateOpts)
 			if err != nil {
 				logrus.Errorln(err.Error())
 				continue
 			}
 			logrus.Infof("successful update. TXID: %s", res.Txid)
 		}
+	} else if cfg.ProxyMode {
+		logrus.Infof("would have updated %d streams if --to was passed", len(streamsToResign))
 	} else {
 		logrus.Infof("would have updated %d streams if --to and --funding-account were passed", len(streamsToResign))
 	}

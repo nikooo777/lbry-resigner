@@ -152,3 +152,90 @@ func TestStreamUpdateBlocking(t *testing.T) {
 		t.Errorf("blocking=%v want true", value)
 	}
 }
+
+func authHeaderServer(t *testing.T, seen *string) *httptest.Server {
+	t.Helper()
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		*seen = r.Header.Get(AuthTokenHeader)
+		_, _ = io.WriteString(w, `{"jsonrpc":"2.0","result":{"wallet":{"blocks":1,"blocks_behind":0}}}`)
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestAuthHeaderSetWhenConfigured(t *testing.T) {
+	var seen string
+	server := authHeaderServer(t, &seen)
+	client := NewClient(server.URL, WithAuthToken("xyz"))
+	_, err := client.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen != "xyz" {
+		t.Errorf("auth header=%q want xyz", seen)
+	}
+}
+
+func TestAuthHeaderAbsentWithoutOption(t *testing.T) {
+	var seen string
+	server := authHeaderServer(t, &seen)
+	client := NewClient(server.URL)
+	_, err := client.Status(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seen != "" {
+		t.Errorf("auth header=%q want empty", seen)
+	}
+}
+
+func TestAccountBalanceOmitsAccountIDWhenNil(t *testing.T) {
+	rec := newRecorder(t, `{"jsonrpc":"2.0","result":{"available":"0"}}`)
+	client := NewClient(rec.server.URL)
+	_, err := client.AccountBalance(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := rec.params(t)
+	if _, ok := params["account_id"]; ok {
+		t.Errorf("account_id should be absent, params=%v", params)
+	}
+
+	rec2 := newRecorder(t, `{"jsonrpc":"2.0","result":{"available":"0"}}`)
+	client2 := NewClient(rec2.server.URL)
+	id := "acc1"
+	_, err = client2.AccountBalance(context.Background(), &id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params2 := rec2.params(t)
+	if got := params2["account_id"]; got != "acc1" {
+		t.Errorf("account_id=%v want acc1", got)
+	}
+}
+
+func TestUTXOListOmitsAccountIDWhenNil(t *testing.T) {
+	rec := newRecorder(t, `{"jsonrpc":"2.0","result":{"items":[]}}`)
+	client := NewClient(rec.server.URL)
+	_, err := client.UTXOList(context.Background(), nil, 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := rec.params(t)
+	if _, ok := params["account_id"]; ok {
+		t.Errorf("account_id should be absent, params=%v", params)
+	}
+
+	rec2 := newRecorder(t, `{"jsonrpc":"2.0","result":{"items":[]}}`)
+	client2 := NewClient(rec2.server.URL)
+	id := "acc1"
+	_, err = client2.UTXOList(context.Background(), &id, 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params2 := rec2.params(t)
+	if got := params2["account_id"]; got != "acc1" {
+		t.Errorf("account_id=%v want acc1", got)
+	}
+}

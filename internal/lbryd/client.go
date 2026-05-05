@@ -8,16 +8,29 @@ import (
 	"net/http"
 )
 
+const AuthTokenHeader = "X-Lbry-Auth-Token"
+
 type Client struct {
 	endpoint   string
 	httpClient *http.Client
+	authToken  string
 }
 
-func NewClient(endpoint string) *Client {
-	return &Client{
+type Option func(*Client)
+
+func WithAuthToken(token string) Option {
+	return func(c *Client) { c.authToken = token }
+}
+
+func NewClient(endpoint string, opts ...Option) *Client {
+	c := &Client{
 		endpoint:   endpoint,
 		httpClient: &http.Client{},
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 type RPCError struct {
@@ -62,6 +75,9 @@ func (c *Client) do(ctx context.Context, method string, params any, out any) err
 		return fmt.Errorf("%s: build request: %w", method, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if c.authToken != "" {
+		req.Header.Set(AuthTokenHeader, c.authToken)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

@@ -25,9 +25,11 @@ func (c *Client) AccountList(ctx context.Context, page, pageSize uint64) (*Accou
 
 func (c *Client) AccountBalance(ctx context.Context, accountID *string) (*AccountBalanceResponse, error) {
 	out := new(AccountBalanceResponse)
-	err := c.do(ctx, "account_balance", map[string]any{
-		"account_id": accountID,
-	}, out)
+	params := map[string]any{}
+	if accountID != nil {
+		params["account_id"] = *accountID
+	}
+	err := c.do(ctx, "account_balance", params, out)
 	if err != nil {
 		return nil, err
 	}
@@ -67,11 +69,14 @@ func (c *Client) StreamList(ctx context.Context, page, pageSize uint64) (*Stream
 
 func (c *Client) UTXOList(ctx context.Context, accountID *string, page, pageSize uint64) (*UTXOListResponse, error) {
 	out := new(UTXOListResponse)
-	err := c.do(ctx, "utxo_list", map[string]any{
-		"account_id": accountID,
-		"page":       page,
-		"page_size":  pageSize,
-	}, out)
+	params := map[string]any{
+		"page":      page,
+		"page_size": pageSize,
+	}
+	if accountID != nil {
+		params["account_id"] = *accountID
+	}
+	err := c.do(ctx, "utxo_list", params, out)
 	if err != nil {
 		return nil, err
 	}
