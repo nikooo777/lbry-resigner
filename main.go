@@ -1,15 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"math"
 	"os"
+	"os/signal"
 	"strconv"
 	"time"
 
-	"github.com/lbryio/lbry.go/v2/extras/errors"
-	"github.com/lbryio/lbry.go/v2/extras/jsonrpc"
-	"github.com/lbryio/lbry.go/v2/extras/util"
+	"stream_resigner/internal/lbryd"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -33,90 +34,93 @@ func main() {
 	cmd.Flags().StringVar(&newChannelID, "to", "", "claimID of the new channel to sign streams with")
 	cmd.Flags().StringVar(&fundingAccountID, "funding-account", "", "id of the funding account used to pay for the transaction")
 
-	if err := cmd.Execute(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	err := cmd.ExecuteContext(ctx)
+	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 }
-func resigner(cmd *cobra.Command, args []string) {
-	client := jsonrpc.NewClient("http://127.0.0.1:5279")
 
-	accountList, err := client.AccountList(1, 1000)
+func resigner(cmd *cobra.Command, args []string) {
+	ctx := cmd.Context()
+	client := lbryd.NewClient("http://127.0.0.1:5279")
+
+	accountList, err := client.AccountList(ctx, 1, 1000)
 	if err != nil {
-		panic(errors.Err(err))
+		panic(err)
 	}
 	logrus.Println("------accounts------")
 	for i, a := range accountList.Items {
-		accountBalance, err := client.AccountBalance(&a.ID)
+		accountBalance, err := client.AccountBalance(ctx, &a.ID)
 		if err != nil {
-			panic(errors.Err(err))
+			panic(err)
 		}
-		logrus.Printf("%d) account id: %s - balance: %s - account name: %s", i, a.ID, accountBalance.Available.String(), a.Name)
+		logrus.Printf("%d) account id: %s - balance: %s - account name: %s", i, a.ID, accountBalance.Available, a.Name)
 	}
 
 	chanMap := make(map[string]string, 10)
-	channels, err := client.ChannelList(nil, 1, 1000, nil)
+
+	unspent, err := client.ChannelList(ctx, 1, 1000, lbryd.ChannelListOptions{IsSpent: lbryd.Ptr(false)})
 	if err != nil {
-		panic(errors.Err(err))
+		panic(err)
 	}
 	logrus.Println("------unspent channels------")
-
-	for _, c := range channels.Items {
+	for _, c := range unspent.Items {
 		chanMap[c.ClaimID] = c.Name
-		if c.IsSpent {
-			continue
-		}
-		logrus.Infof("%s - claim_id: %s - outpoint: %s:%d - thumbnail url: %s", c.Name, c.ClaimID, c.Txid, c.Nout, c.Value.GetThumbnail().GetUrl())
+		logrus.Infof("%s - claim_id: %s - outpoint: %s:%d - thumbnail url: %s", c.Name, c.ClaimID, c.Txid, c.Nout, thumbnailURL(c.Value))
+	}
+
+	spent, err := client.ChannelList(ctx, 1, 1000, lbryd.ChannelListOptions{IsSpent: lbryd.Ptr(true)})
+	if err != nil {
+		panic(err)
 	}
 	logrus.Println("------spent channels------")
-
-	for _, c := range channels.Items {
-		if !c.IsSpent {
-			continue
+	for _, c := range spent.Items {
+		if _, ok := chanMap[c.ClaimID]; !ok {
+			chanMap[c.ClaimID] = c.Name
 		}
-		logrus.Infof("%s - claim_id: %s - outpoint: %s:%d - thumbnail url: %s", c.Name, c.ClaimID, c.Txid, c.Nout, c.Value.GetThumbnail().GetUrl())
+		logrus.Infof("%s - claim_id: %s - outpoint: %s:%d - thumbnail url: %s", c.Name, c.ClaimID, c.Txid, c.Nout, thumbnailURL(c.Value))
 	}
 
-	streams, err := client.StreamList(nil, 1, 100000)
+	streams, err := client.StreamList(ctx, 1, 100000)
 	if err != nil {
-		panic(errors.Err(err))
+		panic(err)
 	}
 	logrus.Println("------streams without valid signatures------")
 
-	streamsToResign := make([]jsonrpc.Claim, 0, len(streams.Items))
+	streamsToResign := make([]lbryd.Stream, 0, len(streams.Items))
 	for _, s := range streams.Items {
 		if s.IsSpent {
 			continue
 		}
-		if !s.IsChannelSignatureValid && s.SigningChannel != nil && s.SigningChannel.ChannelID != "" {
-			if s.SigningChannel.ChannelID == invalidChannelID {
+		if !s.IsChannelSignatureValid && s.SigningChannel != nil && s.SigningChannel.ChannelID != nil {
+			channelID := *s.SigningChannel.ChannelID
+			if channelID == invalidChannelID {
 				streamsToResign = append(streamsToResign, s)
 			}
-			logrus.Printf("%s - invalid channel: %s (%s)", s.Name, chanMap[s.SigningChannel.ChannelID], s.SigningChannel.ChannelID)
+			logrus.Printf("%s - invalid channel: %s (%s)", s.Name, chanMap[channelID], channelID)
 		}
 	}
 	if newChannelID != "" && fundingAccountID != "" {
 		logrus.Println("------preparing funds ------")
-		err = ensureEnoughUTXOs(client, fundingAccountID, len(streamsToResign))
+		err = ensureEnoughUTXOs(ctx, client, fundingAccountID, len(streamsToResign))
 		if err != nil {
-			panic(errors.Err(err))
+			panic(err)
 		}
 		logrus.Println("------updating ------")
 		for _, s := range streamsToResign {
-			streamCreateOptions := jsonrpc.StreamCreateOptions{
-				ClaimCreateOptions: jsonrpc.ClaimCreateOptions{
-					FundingAccountIDs: []string{fundingAccountID},
-				},
-				ChannelID: &newChannelID,
-			}
-			res, err := client.StreamUpdate(s.ClaimID, jsonrpc.StreamUpdateOptions{
-				ClearTags:           util.PtrToBool(false),
-				ClearLanguages:      util.PtrToBool(false),
-				ClearLocations:      util.PtrToBool(false),
-				StreamCreateOptions: &streamCreateOptions,
+			res, err := client.StreamUpdate(ctx, s.ClaimID, lbryd.StreamUpdateOptions{
+				ChannelID:         &newChannelID,
+				FundingAccountIDs: []string{fundingAccountID},
+				ClearTags:         lbryd.Ptr(false),
+				ClearLanguages:    lbryd.Ptr(false),
+				ClearLocations:    lbryd.Ptr(false),
 			})
 			if err != nil {
-				logrus.Errorln(errors.FullTrace(err))
+				logrus.Errorln(err.Error())
 				continue
 			}
 			logrus.Infof("successful update. TXID: %s", res.Txid)
@@ -126,12 +130,19 @@ func resigner(cmd *cobra.Command, args []string) {
 	}
 }
 
-func ensureEnoughUTXOs(client *jsonrpc.Client, spendAccount string, target int) error {
-	utxolist, err := client.UTXOList(&spendAccount, 1, 10000)
+func thumbnailURL(v *lbryd.ClaimValue) string {
+	if v == nil {
+		return ""
+	}
+	return v.Thumbnail.URL
+}
+
+func ensureEnoughUTXOs(ctx context.Context, client *lbryd.Client, spendAccount string, target int) error {
+	utxolist, err := client.UTXOList(ctx, &spendAccount, 1, 10000)
 	if err != nil {
 		return err
 	} else if utxolist == nil {
-		return errors.Err("no response")
+		return errors.New("no response")
 	}
 
 	count := 0
@@ -148,24 +159,24 @@ func ensureEnoughUTXOs(client *jsonrpc.Client, spendAccount string, target int) 
 	}
 	logrus.Infof("utxo count: %d (%d confirmed) out of %d needed", count, confirmedCount, target)
 	if count < target {
-		balance, err := client.AccountBalance(&spendAccount)
+		balance, err := client.AccountBalance(ctx, &spendAccount)
 		if err != nil {
 			return err
 		} else if balance == nil {
-			return errors.Err("no response")
+			return errors.New("no response")
 		}
 
-		balanceAmount, err := strconv.ParseFloat(balance.Available.String(), 64)
+		balanceAmount, err := strconv.ParseFloat(balance.Available, 64)
 		if err != nil {
-			return errors.Err(err)
+			return err
 		}
 		//this is dumb but sometimes the balance is negative and it breaks everything, so let's check again
 		if balanceAmount < 0 {
 			logrus.Infof("negative balance of %.2f found. Waiting to retry...", balanceAmount)
 			time.Sleep(10 * time.Second)
-			balanceAmount, err = strconv.ParseFloat(balance.Available.String(), 64)
+			balanceAmount, err = strconv.ParseFloat(balance.Available, 64)
 			if err != nil {
-				return errors.Err(err)
+				return err
 			}
 		}
 		maxUTXOs := uint64(math.Min(float64(target), 500))
@@ -176,22 +187,22 @@ func ensureEnoughUTXOs(client *jsonrpc.Client, spendAccount string, target int) 
 		if desiredUTXOCount < uint64(confirmedCount) {
 			return nil
 		}
-		availableBalance, _ := balance.Available.Float64()
+		availableBalance, _ := strconv.ParseFloat(balance.Available, 64)
 		logrus.Infof("Splitting balance of %.3f evenly between %d UTXOs", availableBalance, desiredUTXOCount)
 
 		broadcastFee := 0.1
-		prefillTx, err := client.AccountFund(spendAccount, spendAccount, fmt.Sprintf("%.4f", balanceAmount-broadcastFee), desiredUTXOCount, false)
+		prefillTx, err := client.AccountFund(ctx, spendAccount, spendAccount, fmt.Sprintf("%.4f", balanceAmount-broadcastFee), desiredUTXOCount, false)
 		if err != nil {
 			return err
 		} else if prefillTx == nil {
-			return errors.Err("no response")
+			return errors.New("no response")
 		}
-		err = waitForNewBlock(client)
+		err = waitForNewBlock(ctx, client)
 		if err != nil {
 			return err
 		}
 	} else if confirmedCount == 0 {
-		err = waitForNewBlock(client)
+		err = waitForNewBlock(ctx, client)
 		if err != nil {
 			return err
 		}
@@ -199,15 +210,15 @@ func ensureEnoughUTXOs(client *jsonrpc.Client, spendAccount string, target int) 
 	return nil
 }
 
-func waitForNewBlock(client *jsonrpc.Client) error {
-	status, err := client.Status()
+func waitForNewBlock(ctx context.Context, client *lbryd.Client) error {
+	status, err := client.Status(ctx)
 	if err != nil {
 		return err
 	}
 
 	for status.Wallet.Blocks == 0 || status.Wallet.BlocksBehind != 0 {
 		time.Sleep(5 * time.Second)
-		status, err = client.Status()
+		status, err = client.Status(ctx)
 		if err != nil {
 			return err
 		}
@@ -220,7 +231,7 @@ func waitForNewBlock(client *jsonrpc.Client) error {
 		}
 
 		time.Sleep(10 * time.Second)
-		status, err = client.Status()
+		status, err = client.Status(ctx)
 		if err != nil {
 			return err
 		}
